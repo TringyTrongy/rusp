@@ -147,18 +147,22 @@ impl FileWriter {
             self.discard().await;
             return Err(Error::path("finish writing", &part_path, e));
         }
-        drop(self.file);
+        // The handle stays open across the rename. Rust opens files with
+        // FILE_SHARE_DELETE on Windows, so this is portable, and it keeps the
+        // Drop-based cleanup below able to see a consistent `self`.
 
         tokio::fs::rename(&self.part_path, &self.final_path)
             .await
             .path_ctx("move into place", &self.final_path)?;
-        Ok(self.final_path)
+        Ok(self.final_path.clone())
     }
 
     /// Throw the partial file away.
+    ///
+    /// Dropping a `FileWriter` does the same thing; this exists to make the
+    /// intent explicit at the call site.
     pub async fn discard(self) {
-        drop(self.file);
-        let _ = tokio::fs::remove_file(&self.part_path).await;
+        drop(self);
     }
 
     /// Apply the sender's permission bits, honouring only the executable bit.
@@ -185,6 +189,19 @@ impl FileWriter {
     #[cfg(not(unix))]
     pub async fn apply_mode(_path: &Path, _mode: Option<u32>) -> Result<()> {
         Ok(())
+    }
+}
+
+impl Drop for FileWriter {
+    /// Remove the partial file, whatever happened.
+    ///
+    /// Every failure path — an error, a cancellation, a panic, a dropped
+    /// future — has to leave the destination directory as it found it, and
+    /// tying that to the value's lifetime is the only way to be sure. After a
+    /// successful `commit` the part file has already been renamed away, so
+    /// this is a no-op.
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.part_path);
     }
 }
 

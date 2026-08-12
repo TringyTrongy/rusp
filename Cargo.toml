@@ -77,6 +77,9 @@ dirs = "6"
 
 [dev-dependencies]
 tempfile = "3"
+# Integration tests walk the destination tree to compare it with the source.
+walkdir = "2"
+tokio-util = { version = "0.7", default-features = false }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "io-util", "sync", "net", "fs"] }
 
 [profile.release]
