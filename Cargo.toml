@@ -1,0 +1,90 @@
+[package]
+name = "rusp"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+description = "Secure, fast, cross-platform file transfer over a short human-friendly code"
+authors = ["The Rusp authors"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/TringyTrongy/rusp"
+readme = "README.md"
+keywords = ["file-transfer", "p2p", "encryption", "cli", "spake2"]
+categories = ["command-line-utilities", "network-programming"]
+exclude = ["/.github", "/docs"]
+
+[lib]
+name = "rusp"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rusp"
+path = "src/main.rs"
+
+[dependencies]
+# --- async runtime + networking -------------------------------------------
+# `tokio` gives us the async TCP/UDP stack, bounded channels for backpressure,
+# timeouts and Ctrl+C handling. Feature set is trimmed to what we actually use.
+tokio = { version = "1", default-features = false, features = [
+    "rt-multi-thread",
+    "macros",
+    "net",
+    "io-util",
+    "fs",
+    "sync",
+    "time",
+    "signal",
+] }
+# Only for `CancellationToken`, which we thread through every task.
+tokio-util = { version = "0.7", default-features = false }
+# Portable socket options (SO_REUSEADDR/SO_REUSEPORT) needed to bind the LAN
+# discovery multicast socket alongside other listeners on the same port.
+socket2 = "0.6"
+
+# --- CLI + terminal --------------------------------------------------------
+clap = { version = "4", features = ["derive", "wrap_help"] }
+indicatif = "0.18"
+console = { version = "0.16", default-features = false }
+
+# --- serialization ---------------------------------------------------------
+serde = { version = "1", features = ["derive"] }
+# MessagePack with *named* struct fields: control messages stay
+# forward-compatible when new optional fields are introduced.
+rmp-serde = "1.3"
+toml = { version = "0.9", default-features = false, features = ["parse", "serde"] }
+
+# --- cryptography ----------------------------------------------------------
+# SPAKE2 password-authenticated key exchange (RustCrypto/PAKEs). Turns the
+# low-entropy transfer code into a strong shared secret without ever putting
+# the code on the wire.
+spake2 = "0.4"
+# AEAD for the session channel. RFC 8439, constant-time, no hardware reliance.
+chacha20poly1305 = "0.11"
+# Key schedule: one SPAKE2 output -> domain-separated sub-keys.
+hkdf = "0.13"
+sha2 = "0.11"
+hmac = "0.13"
+# Fast tree hash used for per-file integrity verification.
+blake3 = "1"
+# OS randomness for transfer codes, room tokens and discovery nonces.
+getrandom = "0.3"
+zeroize = { version = "1", features = ["derive"] }
+
+# --- filesystem + misc -----------------------------------------------------
+walkdir = "2"
+hex = "0.4"
+thiserror = "2"
+dirs = "6"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "io-util", "sync", "net", "fs"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
+
+[profile.bench]
+lto = "thin"
