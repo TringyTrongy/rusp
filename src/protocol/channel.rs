@@ -456,7 +456,7 @@ mod tests {
     async fn a_clean_close_is_not_an_error() {
         let (mut sender, mut receiver) = established().await;
         sender
-            .send_control(&ControlMessage::Complete(Summary { files: 0, bytes: 0 }))
+            .send_control(&ControlMessage::Complete(Summary::default()))
             .await
             .unwrap();
         sender.shutdown().await.unwrap();

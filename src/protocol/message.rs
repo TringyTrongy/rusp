@@ -21,7 +21,7 @@
 //!
 //! * [`Capabilities::features`] is a free-form set that peers intersect, so a
 //!   future compression or resume feature needs no protocol version bump.
-//! * [`EntryKind`], [`Outcome`] and [`FailureCode`] are integer codes rather
+//! * [`EntryKind`] and [`FailureCode`] are integer codes rather
 //!   than closed enums, so an older build meets an unknown value with a
 //!   sensible fallback instead of a parse failure.
 
@@ -327,31 +327,6 @@ pub struct Accept {
     pub wanted: Vec<u32>,
 }
 
-/// How a single file ended up.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct Outcome(pub u8);
-
-impl Outcome {
-    /// Written and verified.
-    pub const WRITTEN: Outcome = Outcome(0);
-    /// Deliberately not written, for example because it already existed.
-    pub const SKIPPED: Outcome = Outcome(1);
-    /// Something went wrong.
-    pub const FAILED: Outcome = Outcome(2);
-}
-
-impl fmt::Display for Outcome {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            Outcome::WRITTEN => f.write_str("written"),
-            Outcome::SKIPPED => f.write_str("skipped"),
-            Outcome::FAILED => f.write_str("failed"),
-            Outcome(other) => write!(f, "unknown({other})"),
-        }
-    }
-}
-
 /// Why a peer is giving up.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -387,12 +362,22 @@ impl fmt::Display for FailureCode {
 }
 
 /// Totals reported at the end of a transfer.
+///
+/// There is deliberately no per-file acknowledgement in the protocol. Waiting
+/// for one would add a network round trip per file, which is what dominates a
+/// transfer of several thousand small files. The receiver decides what it
+/// wants up front in [`Accept`], verifies each file as it lands, and reports
+/// the totals once at the end; anything that goes wrong in between is a
+/// [`ControlMessage::Failure`], which ends the transfer immediately.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Summary {
     /// Number of files written.
     pub files: u32,
     /// Number of file bytes transferred.
     pub bytes: u64,
+    /// Number of files deliberately not written.
+    #[serde(default)]
+    pub skipped: u32,
 }
 
 /// A control message. Everything except file data is one of these.
@@ -423,16 +408,6 @@ pub enum ControlMessage {
         /// Number of bytes sent for it.
         size: u64,
     },
-    /// The receiver's verdict on a completed file.
-    FileAck {
-        /// Index into the offer's entries.
-        index: u32,
-        /// What happened to it.
-        outcome: Outcome,
-        /// Detail, when the outcome was not a plain success.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        message: Option<String>,
-    },
     /// Everything is done.
     Complete(Summary),
     /// The peer is stopping on purpose.
@@ -461,7 +436,6 @@ impl ControlMessage {
             ControlMessage::Decline { .. } => "decline",
             ControlMessage::FileStart { .. } => "file-start",
             ControlMessage::FileEnd { .. } => "file-end",
-            ControlMessage::FileAck { .. } => "file-ack",
             ControlMessage::Complete(_) => "complete",
             ControlMessage::Cancel { .. } => "cancel",
             ControlMessage::Failure { .. } => "failure",
@@ -660,14 +634,10 @@ mod tests {
                 hash: Hash32::from_bytes([9u8; 32]),
                 size: 1 << 40,
             },
-            ControlMessage::FileAck {
-                index: 7,
-                outcome: Outcome::SKIPPED,
-                message: Some("already there".into()),
-            },
             ControlMessage::Complete(Summary {
                 files: 3,
                 bytes: 1276,
+                skipped: 1,
             }),
             ControlMessage::Cancel { reason: None },
             ControlMessage::Failure {
@@ -860,9 +830,7 @@ mod tests {
     #[test]
     fn unknown_codes_still_print_something_useful() {
         assert_eq!(FailureCode(999).to_string(), "error 999");
-        assert_eq!(Outcome(99).to_string(), "unknown(99)");
         assert_eq!(FailureCode::INTEGRITY.to_string(), "integrity failure");
-        assert_eq!(Outcome::WRITTEN.to_string(), "written");
     }
 
     #[test]

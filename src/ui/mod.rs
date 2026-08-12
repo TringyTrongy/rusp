@@ -5,6 +5,8 @@
 //! looks. Nothing below `ui` depends on `console` or `indicatif`, so the
 //! protocol and transfer layers can be tested without a TTY.
 
+pub mod progress;
+
 use std::error::Error as StdError;
 use std::io::{IsTerminal, Write};
 

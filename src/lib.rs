@@ -32,8 +32,10 @@ pub mod code;
 pub mod config;
 pub mod crypto;
 pub mod error;
+pub mod files;
 pub mod net;
 pub mod protocol;
+pub mod transfer;
 pub mod ui;
 
 pub use code::TransferCode;

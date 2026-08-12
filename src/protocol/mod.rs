@@ -25,8 +25,7 @@
 //!   |<------------------------------------------------|  Accept / Decline
 //!   |  FileStart, Data..., FileEnd { hash }            |
 //!   |------------------------------------------------>|
-//!   |<------------------------------------------------|  FileAck
-//!   |  ... repeated per file ...                       |
+//!   |  ... repeated per file, with no reply in between |
 //!   |  Complete { files, bytes }                       |
 //!   |------------------------------------------------>|
 //!   |<------------------------------------------------|  Complete
@@ -52,7 +51,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 pub use frame::{FrameBuf, FrameReader, FrameWriter, DEFAULT_MAX_FRAME};
 pub use message::{
     Accept, Capabilities, ControlMessage, Entry, EntryKind, FailureCode, Handshake, Hash32, Hello,
-    Incoming, Offer, Outcome, Role, Summary,
+    Incoming, Offer, Role, Summary,
 };
 
 use crate::error::{Error, IoContext, ProtocolError, Result};
