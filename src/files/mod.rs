@@ -1,6 +1,6 @@
 //! Filesystem handling for both ends of a transfer.
 //!
-//! * [`scan`] walks what the user named on the command line into a manifest.
+//! * [`scan()`] walks what the user named on the command line into a manifest.
 //! * [`safe_path`] decides whether a path a stranger sent us may touch the
 //!   disk at all.
 //! * [`writer`] puts received bytes on disk without ever leaving a
