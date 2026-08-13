@@ -408,7 +408,7 @@ mod tests {
         relay_cancel.cancel();
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn sender_and_receiver_meet_on_the_local_network() {
         let port = 39_881;
         // Skip rather than fail if the shared discovery port is unavailable.
@@ -442,7 +442,10 @@ mod tests {
             write.flush().await.unwrap();
         });
 
-        let conn = dial(&options, &r, &cancel).await.unwrap();
+        let conn = tokio::time::timeout(Duration::from_secs(20), dial(&options, &r, &cancel))
+            .await
+            .expect("local discovery must not hang")
+            .unwrap();
         assert_eq!(conn.route(), Route::Lan);
         let (mut read, _write) = conn.into_split();
         let mut got = [0u8; 5];

@@ -684,17 +684,23 @@ mod tests {
 
     #[tokio::test]
     async fn an_unreachable_relay_reports_the_address() {
+        // A port that was just released: reliably refused on every platform,
+        // where a low port such as 1 may instead be filtered and time out.
+        let address = {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            listener.local_addr().unwrap().to_string()
+        };
+
         let cancel = CancellationToken::new();
-        // Port 1 on loopback is not listening on any sane machine.
         let err = relay::rendezvous(
-            &config("127.0.0.1:1", None),
+            &config(&address, None),
             &room("k7m2"),
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             &cancel,
         )
         .await
         .unwrap_err();
-        assert!(err.to_string().contains("127.0.0.1:1"), "{err}");
+        assert!(err.to_string().contains(&address), "{err}");
     }
 
     #[test]

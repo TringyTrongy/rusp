@@ -45,6 +45,15 @@ pub const MAX_DATAGRAM: usize = 512;
 /// How often the receiver repeats its query while waiting.
 const QUERY_INTERVAL: Duration = Duration::from_millis(300);
 
+/// How long to pause after a socket error before trying again.
+///
+/// A datagram that cannot be received says nothing about the next one — a peer
+/// that has gone away makes the kernel deliver an ICMP unreachable, which some
+/// platforms surface as an error on the next call. Retrying immediately would
+/// spin, and this loop shares a runtime with the transfer, so a spin does not
+/// merely waste a core: it can starve the very future it exists to serve.
+const ERROR_BACKOFF: Duration = Duration::from_millis(50);
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 enum DiscoveryMessage {
     /// "Is anybody offering this room?"
@@ -121,10 +130,11 @@ pub async fn serve(
 
         let (len, from) = match received {
             Ok(pair) => pair,
-            // A datagram that could not be received says nothing about the
-            // next one; a peer resetting an ICMP port-unreachable should not
-            // take the responder down.
-            Err(_) => continue,
+            Err(_) => {
+                // Never retry a failed receive immediately; see ERROR_BACKOFF.
+                tokio::time::sleep(ERROR_BACKOFF).await;
+                continue;
+            }
         };
 
         if let Some(DiscoveryMessage::Query { room: wanted }) = decode(&datagram[..len]) {
@@ -208,6 +218,10 @@ pub async fn find(
             };
 
             let Ok(Ok((len, from))) = received else {
+                // Either the listening window closed or the socket errored.
+                // Back off before the next round either way, so a socket that
+                // errors instantly cannot spin until the deadline.
+                tokio::time::sleep(ERROR_BACKOFF).await;
                 break;
             };
             if let Some(DiscoveryMessage::Offer {
@@ -277,7 +291,7 @@ mod tests {
         let _ = decode(&truncated);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn a_receiver_finds_a_sender() {
         // Port 0 is not usable for the shared listener, so pick a high port
         // and accept that a busy CI machine might already hold it.
@@ -291,16 +305,20 @@ mod tests {
         let cancel = CancellationToken::new();
         let responder = tokio::spawn(serve(port, room("k7m2"), 45_678, cancel.clone()));
 
-        let found = find(port, &room("k7m2"), Duration::from_secs(3), &cancel)
-            .await
-            .expect("should find the sender");
+        let found = tokio::time::timeout(
+            Duration::from_secs(20),
+            find(port, &room("k7m2"), Duration::from_secs(3), &cancel),
+        )
+        .await
+        .expect("discovery must not hang")
+        .expect("should find the sender");
         assert_eq!(found.port(), 45_678);
 
         cancel.cancel();
         responder.await.unwrap().unwrap();
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn a_different_room_is_not_answered() {
         let port = 39_872;
         let Ok(_probe) = bind_listener(port) else {
@@ -312,9 +330,13 @@ mod tests {
         let cancel = CancellationToken::new();
         let responder = tokio::spawn(serve(port, room("aaaa"), 45_678, cancel.clone()));
 
-        let err = find(port, &room("bbbb"), Duration::from_millis(600), &cancel)
-            .await
-            .unwrap_err();
+        let err = tokio::time::timeout(
+            Duration::from_secs(20),
+            find(port, &room("bbbb"), Duration::from_millis(600), &cancel),
+        )
+        .await
+        .expect("discovery must not hang")
+        .unwrap_err();
         assert!(
             matches!(err, Error::Network(NetworkError::Timeout(_))),
             "{err}"
