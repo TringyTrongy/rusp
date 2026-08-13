@@ -176,9 +176,12 @@ bit, so a peer cannot hand you a setuid or world-writable file.
 Rusp tries two paths, and the **receiver decides** which one is used so the two
 sides can never pick differently:
 
-1. **Local network.** The receiver multicasts a query naming the room; a sender
-   on the same segment answers with its port and the receiver connects
-   directly. No relay, no configuration, and the data never leaves the network.
+1. **Local network.** The receiver asks for the room by multicast, by broadcast
+   and over loopback; a sender that holds it answers with its port and the
+   receiver connects directly. No relay, no configuration, and the data never
+   leaves the machine or the network segment. Asking three ways means discovery
+   still works where multicast is filtered, and two Rusp processes on one
+   machine always find each other.
 2. **Relay.** Both sides make outbound connections to a relay and meet in a
    room, which works from behind almost any NAT or firewall.
 

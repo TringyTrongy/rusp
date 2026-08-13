@@ -160,17 +160,28 @@ pub async fn find(
     let query = encode(&DiscoveryMessage::Query {
         room: room.as_str().to_owned(),
     });
-    let targets: [SocketAddr; 2] = [
+    // Networks disagree about which of these they carry: some filter
+    // multicast, some filter broadcast, and a macOS machine may refuse both
+    // when it has no usable route. The loopback address covers the remaining
+    // case of two Rusp processes on one machine, which is both a real way to
+    // use this and what makes the tests deterministic everywhere.
+    let targets: [SocketAddr; 3] = [
         SocketAddrV4::new(DISCOVERY_MULTICAST_V4, discovery_port).into(),
         SocketAddrV4::new(Ipv4Addr::BROADCAST, discovery_port).into(),
+        SocketAddrV4::new(Ipv4Addr::LOCALHOST, discovery_port).into(),
     ];
 
     let mut datagram = vec![0u8; MAX_DATAGRAM];
     let deadline = tokio::time::Instant::now() + patience;
 
     loop {
-        // Networks vary in which of multicast and broadcast they carry, so ask
-        // both ways and ignore whichever is refused.
+        // Cancellation is checked before any network work: a platform that
+        // refuses to send must still report the cancellation rather than a
+        // timeout.
+        if cancel.is_cancelled() {
+            return Err(Error::Cancelled);
+        }
+
         let mut sent = false;
         for target in targets {
             if socket.send_to(&query, target).await.is_ok() {

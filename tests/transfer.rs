@@ -4,7 +4,7 @@ mod common;
 
 use std::path::PathBuf;
 
-use common::{pseudo_random, round_trip, round_trip_with, tree, write, TestRelay};
+use common::{pseudo_random, round_trip, tree, write, TestRelay};
 use rusp::config::ConflictPolicy;
 use rusp::error::{Error, TransferError};
 
@@ -469,7 +469,7 @@ async fn symlinks_are_left_behind_unless_asked_for() {
 
     // With --follow-symlinks the contents come across under the link's name.
     let followed = dir();
-    round_trip_with(
+    common::round_trip_with(
         &relay,
         "lnk2",
         &[root],

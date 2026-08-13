@@ -227,7 +227,7 @@ impl TransferCode {
 
 impl fmt::Display for TransferCode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}{}{}", self.room, SEPARATOR, &*self.secret)
+        write!(f, "{}{}{}", self.room, SEPARATOR, *self.secret)
     }
 }
 

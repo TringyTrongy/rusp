@@ -30,9 +30,9 @@ jobs:
       - name: Build
         run: cargo build --all-targets
 
-      # Local-network discovery binds a shared UDP port and joins a multicast
-      # group. CI runners vary in what they allow, so those few tests skip
-      # themselves rather than fail; everything else runs everywhere.
+      # Local-network discovery binds a shared UDP port. The tests skip
+      # themselves if that port is already taken, and reach the responder over
+      # loopback so they do not depend on the runner carrying multicast.
       - name: Test
         run: cargo test -- --nocapture
 
