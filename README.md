@@ -64,17 +64,31 @@ not the file, not its name, and not the code.
 
 ## Installation
 
-From source, with a Rust 1.85 or newer toolchain:
+### Prebuilt binaries
+
+Download the archive for your platform from the [releases page][releases],
+unpack it, and put `rusp` somewhere on your `PATH`:
+
+```console
+$ tar xzf rusp-v0.1.0-x86_64-unknown-linux-gnu.tar.gz
+$ install -m755 rusp-v0.1.0-x86_64-unknown-linux-gnu/rusp ~/.local/bin/
+```
+
+Builds are published for Linux (glibc and static musl), macOS (Intel and
+Apple Silicon) and Windows. Every archive ships with a `.sha256` file:
+
+```console
+$ sha256sum -c rusp-v0.1.0-x86_64-unknown-linux-gnu.tar.gz.sha256
+```
+
+[releases]: https://github.com/TringyTrongy/rusp/releases
+
+### From source
+
+With a Rust 1.85 or newer toolchain:
 
 ```console
 $ cargo install --path .
-```
-
-Or build a release binary and put it somewhere on your `PATH`:
-
-```console
-$ cargo build --release
-$ install -m755 target/release/rusp ~/.local/bin/
 ```
 
 There is nothing to configure for local transfers, and no daemon to run.

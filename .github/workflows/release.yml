@@ -1,0 +1,117 @@
+name: Release
+
+# Pushing a version tag builds rusp for every supported platform and attaches
+# the binaries to a GitHub release:
+#
+#     git tag v0.1.0 && git push origin v0.1.0
+#
+# The workflow file has to exist in the commit the tag points at, so tag a
+# commit that already contains this file.
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          # Statically linked, so it runs on any Linux regardless of glibc age.
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            packages: musl-tools
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install build dependencies
+        if: matrix.packages
+        run: sudo apt-get update && sudo apt-get install -y ${{ matrix.packages }}
+
+      # --locked so a release is built from the exact dependency versions the
+      # tests ran against, not whatever resolves on the day.
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Package
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          staging="rusp-${GITHUB_REF_NAME}-${{ matrix.target }}"
+          mkdir "$staging"
+          cp "target/${{ matrix.target }}/release/rusp" "$staging/"
+          cp README.md LICENSE-MIT LICENSE-APACHE "$staging/"
+          tar czf "$staging.tar.gz" "$staging"
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$staging.tar.gz" > "$staging.tar.gz.sha256"
+          else
+            shasum -a 256 "$staging.tar.gz" > "$staging.tar.gz.sha256"
+          fi
+
+      - name: Package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $staging = "rusp-$env:GITHUB_REF_NAME-${{ matrix.target }}"
+          New-Item -ItemType Directory -Path $staging | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/rusp.exe" $staging
+          Copy-Item README.md, LICENSE-MIT, LICENSE-APACHE $staging
+          Compress-Archive -Path $staging -DestinationPath "$staging.zip"
+          $hash = (Get-FileHash "$staging.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  $staging.zip" | Out-File -FilePath "$staging.zip.sha256" -Encoding ascii
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: |
+            rusp-*.tar.gz
+            rusp-*.tar.gz.sha256
+            rusp-*.zip
+            rusp-*.zip.sha256
+          if-no-files-found: error
+
+  release:
+    name: Publish the release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Collect binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true
