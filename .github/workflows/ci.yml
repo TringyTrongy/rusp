@@ -14,6 +14,8 @@ jobs:
   test:
     name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    # A hung test must fail with logs rather than occupy a runner for hours.
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -30,11 +32,28 @@ jobs:
       - name: Build
         run: cargo build --all-targets
 
-      # Local-network discovery binds a shared UDP port. The tests skip
-      # themselves if that port is already taken, and reach the responder over
-      # loopback so they do not depend on the runner carrying multicast.
-      - name: Test
-        run: cargo test -- --nocapture
+      # Each test binary runs as its own step with its own budget. `cargo
+      # test` stops at the first binary that fails, which hides everything
+      # after it, and a single combined step cannot say *which* binary hung.
+      #
+      # Local-network discovery binds a shared UDP port. Those tests skip
+      # themselves if the port is taken, and reach the responder over loopback
+      # so they do not depend on the runner carrying multicast.
+      - name: Unit tests
+        timeout-minutes: 5
+        run: cargo test --lib -- --nocapture
+
+      - name: Transfer tests
+        timeout-minutes: 5
+        run: cargo test --test transfer -- --nocapture
+
+      - name: Security tests
+        timeout-minutes: 5
+        run: cargo test --test security -- --nocapture
+
+      - name: CLI tests
+        timeout-minutes: 5
+        run: cargo test --test cli -- --nocapture
 
       - name: Build release
         run: cargo build --release
@@ -42,6 +61,7 @@ jobs:
   lint:
     name: fmt, clippy, docs
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -67,6 +87,7 @@ jobs:
   minimum-rust-version:
     name: rust 1.85
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.85.0
