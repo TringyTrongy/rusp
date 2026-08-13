@@ -446,7 +446,15 @@ async fn a_sender_that_lies_about_a_file_size_is_cut_off() {
         "{err}"
     );
 
-    let _ = hostile.await;
+    // Release the socket before waiting for the sender. It is still trying to
+    // push megabytes at a receiver that has stopped reading, and until this
+    // end closes, those writes simply block: the relay cannot drain into a
+    // full receive buffer. Linux happens to have enough buffer to swallow the
+    // whole flood, which is why this only ever deadlocked on macOS and
+    // Windows. Dropping the channel makes the writes fail, which is what ends
+    // the sender.
+    drop(channel);
+    let _ = tokio::time::timeout(Duration::from_secs(10), hostile).await;
     let written: u64 = walkdir::WalkDir::new(destination.path())
         .into_iter()
         .filter_map(|e| e.ok())
