@@ -642,3 +642,38 @@ async fn a_frame_larger_than_the_limit_is_refused_before_it_is_allocated() {
     );
     let _ = attacker.await;
 }
+
+/// A hostile peer can declare an enormous array in a few bytes. Decoding must
+/// not trust that number: a five-byte lie must not turn into a multi-gigabyte
+/// allocation.
+fn control_frame_claiming_a_huge_array(variant: &str, field: &str) -> Vec<u8> {
+    use rusp::protocol::message::kind;
+    let mut v = vec![kind::CONTROL];
+    v.push(0x81); // fixmap, one pair: the externally tagged enum variant
+    v.push(0xa0 | variant.len() as u8);
+    v.extend_from_slice(variant.as_bytes());
+    v.push(0x81); // fixmap, one pair: the field
+    v.push(0xa0 | field.len() as u8);
+    v.extend_from_slice(field.as_bytes());
+    v.push(0xdd); // array32 header...
+    v.extend_from_slice(&u32::MAX.to_be_bytes()); // ...claiming four billion items
+    v
+}
+
+#[test]
+fn a_declared_but_absent_array_is_refused_without_allocating() {
+    for (variant, field) in [("Offer", "entries"), ("Accept", "wanted")] {
+        let payload = control_frame_claiming_a_huge_array(variant, field);
+        assert!(
+            payload.len() < 32,
+            "the whole attack is {} bytes",
+            payload.len()
+        );
+        let err = rusp::protocol::message::decode_incoming(&payload)
+            .expect_err("a four-billion-item claim backed by nothing must be refused");
+        assert!(
+            matches!(err, Error::Protocol(ProtocolError::Malformed(_))),
+            "{variant}/{field}: {err}"
+        );
+    }
+}

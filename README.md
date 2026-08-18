@@ -28,8 +28,31 @@ not the file, not its name, and not the code.
 
 [croc]: https://github.com/schollz/croc
 
+## Status
+
+Rusp is new. Version 0.1.0, written from scratch, with no external security
+review and no track record of real-world use.
+
+What that does and does not mean:
+
+* The cryptography is **not home-made**. SPAKE2, ChaCha20-Poly1305,
+  HKDF-SHA256, HMAC-SHA256 and BLAKE3 come from established crates, used in
+  their intended configurations. There is no invented primitive anywhere.
+* The properties in [Security](#security) are **tested, not asserted** — a real
+  transfer is recorded byte for byte and checked for leaks, path traversal is
+  attacked, a lying sender is cut off, a flipped bit ends the session. See
+  `tests/security.rs`, where each test names an attack.
+* Nobody but its author has reviewed the design or the code. Tests prove the
+  attacks I thought of; an auditor is paid to think of the ones I did not.
+
+So: reasonable for personal and team use, and for moving files you would
+otherwise put in a chat window or on a USB stick. If a compromise would be
+seriously damaging, wait for review by someone other than the author — and
+please open an issue if you find something.
+
 ## Contents
 
+- [Status](#status)
 - [Features](#features)
 - [Installation](#installation)
 - [Quick start](#quick-start)
@@ -209,6 +232,11 @@ $ rusp relay --listen 0.0.0.0:9110 --token "a shared secret"
 A relay pairs two clients by room name and then copies bytes. It holds no keys,
 never sees a code, and cannot decrypt anything it forwards. Set a token unless
 you intend the relay to be public.
+
+There is **no bandwidth or duration limit** on a paired room: once two clients
+meet, they can move as much as they like for as long as they like. A public
+relay is therefore an open pipe, and should sit behind whatever rate limiting
+and traffic accounting you would put in front of any other public service.
 
 When a room is already in use, or the relay is at capacity, a new client is
 **refused** rather than displacing anybody — otherwise a stranger could knock
